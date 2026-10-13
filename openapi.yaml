@@ -36,6 +36,7 @@ paths:
   /auth/register:
     post:
       tags: [auth]
+      operationId: register
       security: []
       summary: Creer un compte
       requestBody:
@@ -53,6 +54,7 @@ paths:
   /auth/login:
     post:
       tags: [auth]
+      operationId: login
       security: []
       summary: Se connecter
       requestBody:
@@ -70,6 +72,7 @@ paths:
   /auth/refresh:
     post:
       tags: [auth]
+      operationId: refreshToken
       security: []
       summary: Renouveler le token d'acces
       requestBody:
@@ -90,6 +93,7 @@ paths:
   /users/me:
     get:
       tags: [users]
+      operationId: getMyProfile
       summary: Profil courant (ecran Profil)
       responses:
         '200':
@@ -99,6 +103,7 @@ paths:
               schema: { $ref: '#/components/schemas/UserProfile' }
     patch:
       tags: [users]
+      operationId: updateMyProfile
       summary: Mettre a jour le profil (morphologie, reglages)
       requestBody:
         content:
@@ -114,6 +119,7 @@ paths:
   /exercises:
     get:
       tags: [exercises]
+      operationId: listExercises
       summary: Catalogue d'exercices (ecran Choix de l'exercice)
       parameters:
         - { name: q, in: query, description: Recherche texte, schema: { type: string } }
@@ -130,6 +136,7 @@ paths:
   /exercises/{code}:
     get:
       tags: [exercises]
+      operationId: getExercise
       summary: Detail d'un exercice avec ses seuils biomecaniques
       description: |
         Les seuils vivent en base (seuil_biomecanique). Le mobile les telecharge et les
@@ -151,6 +158,7 @@ paths:
   /sessions:
     post:
       tags: [sessions]
+      operationId: createSession
       summary: Ouvrir une seance
       description: Une seance peut contenir plusieurs exercices (l'exercice est porte par la serie).
       requestBody:
@@ -166,6 +174,7 @@ paths:
               schema: { $ref: '#/components/schemas/Session' }
     get:
       tags: [sessions]
+      operationId: listSessions
       summary: Lister mes seances (Accueil, bandeau "seance en cours")
       description: Pour le bandeau, utiliser status=ACTIVE&limit=1.
       parameters:
@@ -187,6 +196,7 @@ paths:
   /sessions/{sessionId}:
     get:
       tags: [sessions]
+      operationId: getSession
       summary: Detail d'une seance
       parameters:
         - { $ref: '#/components/parameters/SessionId' }
@@ -200,6 +210,7 @@ paths:
   /sessions/{sessionId}/finish:
     post:
       tags: [sessions]
+      operationId: finishSession
       summary: Terminer la seance
       parameters:
         - { $ref: '#/components/parameters/SessionId' }
@@ -213,6 +224,7 @@ paths:
   /sessions/{sessionId}/series:
     post:
       tags: [series]
+      operationId: uploadSeries
       summary: Envoyer une serie (lot de telemetrie, asynchrone)
       description: |
         Un appel = une serie complete (ex. 10 squats ~ 300 frames a 10 FPS, ~0,26 Mo avant gzip).
@@ -248,6 +260,7 @@ paths:
             Retry-After: { schema: { type: integer } }
     get:
       tags: [series]
+      operationId: listSeries
       summary: Series d'une seance
       parameters:
         - { $ref: '#/components/parameters/SessionId' }
@@ -262,6 +275,7 @@ paths:
   /sessions/{sessionId}/series/{seriesId}/report:
     get:
       tags: [series]
+      operationId: getSeriesReport
       summary: Rapport de serie (ecran Rapport de serie)
       description: Tant que status != DONE, repetitions est vide => le mobile reinterroge (polling).
       parameters:
@@ -278,6 +292,7 @@ paths:
   /stats/progress:
     get:
       tags: [stats]
+      operationId: getProgress
       summary: Progression (ecran Progression, lit agregat_progression)
       parameters:
         - { name: exercise, in: query, required: true, schema: { $ref: '#/components/schemas/ExerciseCode' } }
@@ -293,6 +308,7 @@ paths:
   /stats/summary:
     get:
       tags: [stats]
+      operationId: getSummary
       summary: Chiffres cles (Accueil = semaine, Profil = global)
       parameters:
         - { name: from, in: query, schema: { type: string, format: date } }
@@ -307,6 +323,7 @@ paths:
   /internal/users/{userId}/morphology:
     get:
       tags: [internal]
+      operationId: getUserMorphology
       security: [{ serviceToken: [] }]
       summary: Morphologie d'un utilisateur (Analytique -> Utilisateurs)
       description: Sert a normaliser les angles. Pas de jointure entre schemas - appel d'API.
@@ -322,6 +339,7 @@ paths:
   /healthz:
     get:
       tags: [ops]
+      operationId: liveness
       security: []
       summary: Liveness probe
       responses:
@@ -329,6 +347,7 @@ paths:
   /readyz:
     get:
       tags: [ops]
+      operationId: readiness
       security: []
       summary: Readiness probe (PostgreSQL + RabbitMQ joignables)
       responses:
@@ -609,4 +628,3 @@ components:
         repCount: { type: integer }
         anomalyRate: { type: number }
         scope: { type: string, enum: [FILMED_SERIES_ONLY] }
-

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: BodyVision API
-  version: 0.4.0
+  version: 0.4.1
   description: |
     Contrat API BodyVision
 
@@ -53,6 +53,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
         '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /auth/login:
     post:
       tags: [auth]
@@ -71,6 +72,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
         '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /auth/refresh:
     post:
       tags: [auth]
@@ -85,13 +87,15 @@ paths:
               type: object
               required: [refreshToken]
               properties:
-                refreshToken: { type: string }
+                refreshToken: { type: string, minLength: 1, maxLength: 512 }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /.well-known/jwks.json:
     servers:
       - url: https://api.bodyvision.example
@@ -125,20 +129,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserProfile' }
+        '401': { $ref: '#/components/responses/Error' }
     patch:
       tags: [users]
       operationId: updateMyProfile
       summary: Mettre a jour le profil (morphologie, reglages)
+      description: |
+        Mise a jour partielle : seuls les champs envoyes sont modifies. `null` efface le nom ou la morphologie ;
+        un reglage (`settings`) ne peut pas etre efface. `id` et `email` sont en lecture seule : ignores s'ils sont
+        envoyes, on peut donc renvoyer tel quel le resultat de GET /users/me.
       requestBody:
+        required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UserProfile' }
+            schema: { $ref: '#/components/schemas/UserProfileUpdate' }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserProfile' }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
 
   /exercises:
     get:
@@ -361,6 +373,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Morphology' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
 
   /healthz:
     servers:
@@ -373,7 +388,11 @@ paths:
       security: []
       summary: Liveness probe
       responses:
-        '200': { description: OK }
+        '200':
+          description: Le processus repond
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Liveness' }
   /readyz:
     servers:
       - url: https://api.bodyvision.example
@@ -385,8 +404,16 @@ paths:
       security: []
       summary: Readiness probe (PostgreSQL + RabbitMQ joignables)
       responses:
-        '200': { description: Pret }
-        '503': { description: Non pret }
+        '200':
+          description: Pret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+        '503':
+          description: Non pret, ne pas envoyer de trafic a cette instance
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
 
 components:
   securitySchemes:
@@ -433,34 +460,68 @@ components:
       required: [email, password]
       properties:
         email: { type: string, format: email }
-        password: { type: string, format: password, minLength: 10 }
+        password: { type: string, format: password, minLength: 10, maxLength: 128 }
     TokenPair:
       type: object
+      required: [accessToken, refreshToken, expiresIn]
       properties:
         accessToken: { type: string }
         refreshToken: { type: string }
-        expiresIn: { type: integer, example: 900 }
+        expiresIn: { type: integer, example: 900, description: "Duree de validite du jeton d'acces, en secondes" }
+    HeightCm: { type: integer, nullable: true, minimum: 100, maximum: 250 }
+    WeightKg: { type: number, nullable: true, minimum: 20, maximum: 300 }
+    Level: { type: string, nullable: true, enum: [BEGINNER, INTERMEDIATE, ADVANCED, null] }
     Morphology:
       type: object
+      description: Toujours renvoyee en entier ; une valeur non renseignee vaut null.
+      required: [heightCm, weightKg, level]
       properties:
-        heightCm: { type: integer }
-        weightKg: { type: number }
-        level: { type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED] }
+        heightCm: { $ref: '#/components/schemas/HeightCm' }
+        weightKg: { $ref: '#/components/schemas/WeightKg' }
+        level: { $ref: '#/components/schemas/Level' }
     UserProfile:
       allOf:
         - { $ref: '#/components/schemas/Morphology' }
         - type: object
+          required: [id, email, displayName, settings]
           properties:
             id: { type: string, format: uuid, readOnly: true }
             email: { type: string, format: email, readOnly: true }
-            displayName: { type: string }
+            displayName: { type: string, nullable: true, maxLength: 100 }
             settings:
               type: object
               description: |
                Reglages d'analyse et d'envoi (a confirmer : serveur ou local au mobile)
+              required: [analysisQuality, uploadMode]
               properties:
-                analysisQuality: { type: string, example: 640x480@30 }
+                analysisQuality: { type: string, maxLength: 32, example: 640x480@30 }
                 uploadMode: { type: string, enum: [WIFI_ONLY, ANY_NETWORK, MANUAL], default: WIFI_ONLY }
+    UserProfileUpdate:
+      description: |
+        Corps de PATCH /users/me. Tous les champs sont optionnels. `id` et `email` n'y figurent pas : ils sont
+        en lecture seule.
+      type: object
+      properties:
+        heightCm: { $ref: '#/components/schemas/HeightCm' }
+        weightKg: { $ref: '#/components/schemas/WeightKg' }
+        level: { $ref: '#/components/schemas/Level' }
+        displayName: { type: string, nullable: true, maxLength: 100 }
+        settings:
+          type: object
+          properties:
+            analysisQuality: { type: string, maxLength: 32, example: 640x480@30 }
+            uploadMode: { type: string, enum: [WIFI_ONLY, ANY_NETWORK, MANUAL] }
+    Liveness:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    Readiness:
+      type: object
+      required: [status, database]
+      properties:
+        status: { type: string, enum: [ready, unavailable] }
+        database: { type: string, enum: [up, down], description: Etat de PostgreSQL }
     ExerciseCode:
       type: string
       pattern: '^[A-Z0-9_]+$'

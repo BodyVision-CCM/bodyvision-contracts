@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: BodyVision API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contrat API BodyVision
 
@@ -16,6 +16,8 @@ info:
       modele de donnees (GENOU, DESCENTE, SEMAINE...).
     - Landmarks encodes en tableaux [x, y, z, v] (v0.3), 10 FPS vers le Cloud.
     - Statistiques : uniquement sur les series filmees.
+    - Hors prefixe /v1 : les sondes (/healthz, /readyz) et le JWKS (/.well-known/jwks.json) ne sont pas des
+      routes d'API versionnees ; ils portent leur propre `servers` (sans /v1).
 servers:
   - url: https://api.bodyvision.example/v1
   - url: http://localhost:4010/v1
@@ -90,6 +92,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
+  /.well-known/jwks.json:
+    servers:
+      - url: https://api.bodyvision.example
+      - url: http://localhost:4010
+        description: Mock Prism
+    get:
+      tags: [auth]
+      operationId: getJwks
+      security: []
+      summary: Cle publique de signature des jetons (JWKS)
+      description: |
+        Les autres services (Ingestion, Analytique) valident les jetons d'acces localement avec cette cle
+        publique, sans appeler le service Utilisateurs a chaque requete. Le `kid` du jeton designe la cle a utiliser.
+        Route publique, hors prefixe /v1.
+      responses:
+        '200':
+          description: Jeu de cles publiques
+          headers:
+            Cache-Control: { schema: { type: string, example: 'public, max-age=300' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JwkSet' }
   /users/me:
     get:
       tags: [users]
@@ -244,7 +268,9 @@ paths:
             schema: { $ref: '#/components/schemas/SeriesUpload' }
       responses:
         '202':
-          description: Lot accepte et mis en file
+          description: |
+            Lot accepte et mis en file. Le `batchId` retourne est aussi le `seriesId` de la serie : il s'utilise
+            directement dans l'URL du rapport, GET /sessions/{sessionId}/series/{seriesId}/report.
           content:
             application/json:
               schema:
@@ -337,6 +363,10 @@ paths:
               schema: { $ref: '#/components/schemas/Morphology' }
 
   /healthz:
+    servers:
+      - url: https://api.bodyvision.example
+      - url: http://localhost:4010
+        description: Mock Prism
     get:
       tags: [ops]
       operationId: liveness
@@ -345,6 +375,10 @@ paths:
       responses:
         '200': { description: OK }
   /readyz:
+    servers:
+      - url: https://api.bodyvision.example
+      - url: http://localhost:4010
+        description: Mock Prism
     get:
       tags: [ops]
       operationId: readiness
@@ -369,6 +403,24 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    JwkSet:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/Jwk' }
+    Jwk:
+      type: object
+      description: Cle publique RSA au format JWK (RFC 7517)
+      required: [kty, use, alg, kid, n, e]
+      properties:
+        kty: { type: string, example: RSA }
+        use: { type: string, example: sig }
+        alg: { type: string, example: RS256 }
+        kid: { type: string, description: Identifiant de la cle ; le jeton le reprend dans son en-tete }
+        n: { type: string, description: Module RSA (base64url) }
+        e: { type: string, description: Exposant public RSA (base64url), example: AQAB }
     Error:
       type: object
       required: [code, message]
@@ -415,9 +467,12 @@ components:
       example: SQUAT
     Joint:
       type: string
-      description: Articulation (extensible)
+      description: |
+        Articulation surveillee, code du referentiel analytique.articulation.
+        Le referentiel est extensible : un ajout en base ne doit pas casser les clients.
+        Valeurs actuelles, a titre indicatif : GENOU, HANCHE, DOS, EPAULE, COUDE, CHEVILLE.
+      pattern: '^[A-Z0-9_]+$'
       example: GENOU
-      enum: [GENOU, HANCHE, DOS, EPAULE, COUDE, CHEVILLE]
     Phase:
       type: string
       enum: [DESCENTE, BAS, MONTEE]
@@ -505,7 +560,12 @@ components:
       type: object
       required: [batchId, index, exerciseCode, startedAt, endedAt, contractVersion, capture, frames]
       properties:
-        batchId: { type: string, format: uuid, description: Cle d'idempotence (traitement_lot.batch_id) }
+        batchId:
+          type: string
+          format: uuid
+          description: |
+            Cle d'idempotence (traitement_lot.batch_id), generee par le mobile. C'est aussi le `seriesId` de la serie
+            (serie.id = batchId) : le mobile peut interroger le rapport sans attendre de reponse du serveur.
         index: { type: integer, minimum: 0, description: Rang de la serie dans la seance }
         exerciseCode: { $ref: '#/components/schemas/ExerciseCode' }
         startedAt: { type: string, format: date-time }
@@ -626,5 +686,11 @@ components:
         sessionCount: { type: integer }
         seriesCount: { type: integer }
         repCount: { type: integer }
-        anomalyRate: { type: number }
+        anomalyRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: |
+            Part des repetitions ayant au moins une anomalie (nb_repetitions_avec_anomalie / nb_repetitions).
+            Ce n'est pas le nombre d'anomalies par repetition, qui peut depasser 1.
         scope: { type: string, enum: [FILMED_SERIES_ONLY] }

@@ -30,3 +30,14 @@ jobs:
 
       - name: Valider le contrat
         run: npx --yes @stoplight/spectral-cli@6.17.0 lint openapi.yaml
+
+      - name: Scanner le dépôt avec Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false

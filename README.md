@@ -19,7 +19,7 @@ La version qui fait foi est celle de la branche `main`.
 ## Valider le contrat
 
 ```bash
-npx @stoplight/spectral-cli lint openapi.yaml
+npx --yes @stoplight/spectral-cli@6.17.0 lint openapi.yaml
 ```
 
 Aucune installation préalable : `npx` récupère l'outil à la volée.
@@ -27,7 +27,9 @@ Aucune installation préalable : `npx` récupère l'outil à la volée.
 signalent des manques de style (opération sans `operationId`, réponse non
 documentée...).
 
-La validation deviendra automatique en CI (SCRUM-42).
+Le workflow `.github/workflows/ci.yml` lance cette validation sur chaque Pull Request et
+sur `main`, avec Node.js 24 et Spectral 6.17.0 (SCRUM-42). Les erreurs bloquent le job ;
+les avertissements restent informatifs.
 
 ## Servir un mock
 
